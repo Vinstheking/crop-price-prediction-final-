@@ -1,0 +1,25 @@
+import numpy as np
+
+# Example new data (let's say day = 15, month = 6)
+new_data = {
+    'day': [15],
+    'month': [6]
+}
+
+# Convert to a DataFrame
+new_df = pd.DataFrame(new_data)
+
+# Apply cyclical encoding to the new data
+new_df['day_sin'] = np.sin(2 * np.pi * new_df['day'] / 31)
+new_df['day_cos'] = np.cos(2 * np.pi * new_df['day'] / 31)
+new_df['month_sin'] = np.sin(2 * np.pi * new_df['month'] / 12)
+new_df['month_cos'] = np.cos(2 * np.pi * new_df['month'] / 12)
+
+# Drop original 'day' and 'month' columns if no longer needed
+new_df = new_df.drop(columns=['day', 'month'])
+
+# Now, you can use the model to predict the price
+# Assuming `model` is the trained Random Forest model
+predicted_price = model.predict(new_df)
+
+print(f"Predicted price: {predicted_price[0]}")
