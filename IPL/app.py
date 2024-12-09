@@ -1,58 +1,52 @@
-import streamlit as st
-import numpy as np
-import pandas as pd
-import pickle
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
+from ai_model import ai_model
 
+class InputData(BaseModel):
+    date: int
+    month: int
+    crop: str
+    district: str
 
-with open('scaler.pkl', 'rb') as f:
-    loaded_scaler = pickle.load(f)
+app = FastAPI()
 
-with open('model.pkl', 'rb') as f:
-    model = pickle.load(f)
+# Adding middleware for CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins for CORS
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all HTTP methods
+    allow_headers=["*"],  # Allows all headers
+)
 
+@app.get("/")
+def hello():
+    return {"message": "HELLO WORLD"}
 
-st.title("Agricultural Crop Price Prediction")
-
-
-st.header("Enter the crop details to predict price")
-
-day = st.selectbox('Select a day', list(range(1, 32)))
-month = st.selectbox('Select a month', list(range(1, 13)))
-crop = st.selectbox('Crop Name', ['Ragi', 'Rice', 'Onion', 'Coconut', 'Tomato'])  # Example crops
-district = st.selectbox('District', ['ba','ch','my','tu','ha'])  # Example districts
-
-# Convert 'day' and 'month' to cyclic features
-day_sin = np.sin(2 * np.pi * day / 31)
-day_cos = np.cos(2 * np.pi * day / 31)
-month_sin = np.sin(2 * np.pi * month / 12)
-month_cos = np.cos(2 * np.pi * month / 12)
-
-
-
-
-
-input_data = pd.DataFrame({
-    'day_sin': [day_sin],
-    'day_cos': [day_cos],
-    'month_sin': [month_sin],
-    'month_cos': [month_cos],
-    'District Name_Chamrajnagar': [1 if district == 'ch' else 0],
-    'District Name_Hassan': [1 if district == 'ha' else 0],
-    'District Name_Mysore': [1 if district == 'my' else 0],
-    'District Name_Tumkur': [1 if district == 'tu' else 0],
-    'Commodity_Onion': [1 if crop == 'Onion' else 0],
-    'Commodity_Ragi (Finger Millet)': [1 if crop == 'Ragi' else 0],
-    'Commodity_Rice': [1 if crop == 'Rice' else 0],
-    'Commodity_Tomato': [1 if crop == 'Tomato' else 0]
-
-})
-
-ip= loaded_scaler.transform(input_data)
-
-
-if st.button('Predict Price'):
-    # Make prediction using the trained model
-    predicted_price = model.predict(ip)
+@app.post("/predict")
+async def predict_price(item: InputData):
+    # Validate crop type
+    if item.crop not in ["Ragi", "Rice", "Onion", "Coconut", "Tomato"]:
+        raise HTTPException(status_code=400, detail="Invalid crop type")
     
-    # Display the predicted price
-    st.write(f"The predicted price for the selected crop is: ₹ {predicted_price[0]:.2f}")
+    # Validate district
+    if item.district not in ["ba", "ch", "my", "tu", "ha"]:
+        raise HTTPException(status_code=400, detail="Invalid district")
+    
+    # Validate date (1-31) and month (1-12)
+    if not (1 <= item.date <= 31):
+        raise HTTPException(status_code=400, detail="Invalid date. It should be between 1 and 31.")
+    
+    if not (1 <= item.month <= 12):
+        raise HTTPException(status_code=400, detail="Invalid month. It should be between 1 and 12.")
+    
+    try:
+        # Get the prediction result
+        price = ai_model(item.date, item.month, item.crop, item.district)
+        if not price:  # Handle case where model returns empty or invalid result
+            raise HTTPException(status_code=500, detail="Model prediction failed.")
+        
+        return {"predicted_price": price[0]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
